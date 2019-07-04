@@ -1,0 +1,79 @@
+plugins {
+    id 'java'
+    id 'war'
+    id 'maven'
+}
+
+group 'york.b2.xid-locator'
+version getB2Version()
+
+project.ext {
+    learnVersion = "3100.0.0-rel.107"
+    springVersion = "5.0.6.RELEASE"
+    slf4jVersion="1.6.6"
+}
+
+String getB2Version() {
+    File mfFile = new File(file("src/main/webapp"), 'WEB-INF/bb-manifest.xml')
+    def manifest = new XmlSlurper().parse(mfFile)
+    return manifest.plugin.version['@value'].toString()+"-RELEASE"
+
+}
+
+repositories {
+    mavenCentral()
+    maven { url "https://maven.blackboard.com/content/repositories/releases/" }
+}
+
+configurations {
+    //https://www.concretepage.com/build-tools/gradle/gradle-exclude-transitive-dependency-example
+    //compile.exclude module: 'dom4j'
+    // Removing xml-apis to make it work in OpenJDK11 and SaaS
+    compile.exclude module: 'xml-apis'
+    buildUtils
+}
+
+dependencies {
+    providedCompile "javax.servlet:servlet-api:2.5"
+    providedCompile "javax.servlet:jstl:1.2"
+    providedCompile "javax.servlet.jsp:jsp-api:2.0"
+
+    // providedCompile dependencies are libraries needed to build, but should not be included in the B2 WAR.
+    providedCompile("blackboard.platform:bb-platform:${project.learnVersion}") { transitive = false }
+    providedCompile("blackboard.platform:bb-cms-admin:${project.learnVersion}") { transitive = false }
+    providedCompile("blackboard.platform:bb-taglibs:${project.learnVersion}") { transitive = false }
+    providedCompile("blackboard.platform:bb-bbxythos:${project.learnVersion}") { transitive = false }
+    providedCompile("blackboard.platform:xsscore:${project.learnVersion}") { transitive = false }
+    compile("blackboard.platform:bb-spring-webapi:${project.learnVersion}") { transitive = false }
+
+    compile "org.slf4j:slf4j-api:${project.slf4jVersion}"
+    compile "org.slf4j:jcl-over-slf4j:${project.slf4jVersion}"
+    compile "org.slf4j:slf4j-log4j12:${project.slf4jVersion}"
+
+    compile "org.apache.commons:commons-lang3:3.1"
+
+    compile "org.springframework:spring-webmvc:${project.springVersion}"
+
+    // For autowired
+    compile("com.fasterxml.jackson.core:jackson-databind:2.9.5")
+    // To fix: Cannot convert value of type 'com.fasterxml.jackson.dataformat.cbor.CBORFactory' to required type
+    // 'com.fasterxml.jackson.core.JsonFactory'
+    compile("com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:2.9.5")
+
+
+    buildUtils "org.oscelot:b2deploy-task:0.1.0"
+
+    // fix the javax.annotation.Resource issue with OpenJDK 11
+    compile group: 'javax.annotation', name: 'javax.annotation-api', version: '1.3.2'
+
+    testCompile group: 'junit', name: 'junit', version: '4.11'
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+
+}
+
+
+// Add a task to deploy a B2 using starting block
+task deployB2(dependsOn: "war") << {
+    ant.taskdef(name: "b2deploy", classname: "org.oscelot.ant.B2DeployTask", classpath: project.configurations.buildUtils.asPath)
+    ant.b2deploy(localfilepath: project.war.archivePath, host: "http://localhost:9876", courseorgavailable: 'true', clean: 'true')
+}
